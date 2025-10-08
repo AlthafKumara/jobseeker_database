@@ -45,7 +45,7 @@ router.post(
       user = new User({
         name,
         email,
-        password,
+        password, 
         role
       });
 
@@ -127,7 +127,8 @@ router.post(
       check('address', 'Address is required').not().isEmpty(),
       check('phone', 'Phone is required').not().isEmpty(),
       check('date_of_birth', 'Date of birth is required').isISO8601(),
-      check('gender', 'Gender is required').isIn(['Male', 'Female', 'Other'])
+      check('gender', 'Gender is required').isIn(['Male', 'Female', 'Other']),
+      check('profile_picture', 'Profile picture is required').not().isEmpty()
     ]
   ],
   async (req, res) => {
