@@ -198,7 +198,7 @@ router.post(
       check('name', 'Company name is required').not().isEmpty(),
       check('address', 'Address is required').not().isEmpty(),
       check('phone', 'Phone is required').not().isEmpty(),
-      check('description''Description is required').not().isEmpty(),
+      check('description','Description is required').not().isEmpty(),
       check('logo', 'logo isrequired').not().isEmpty()
     ]
   ],
