@@ -35,7 +35,9 @@ router.put(
     [
       check('name', 'Name is required').not().isEmpty(),
       check('address', 'Address is required').not().isEmpty(),
-      check('phone', 'Phone number is required').not().isEmpty()
+      check('phone', 'Phone number is required').not().isEmpty(),
+      check('description','Description is required').not().isEmpty(),
+      check('logo', 'Logo is required').not().isEmpty()
     ]
   ],
   async (req, res) => {

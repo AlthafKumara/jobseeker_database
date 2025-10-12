@@ -38,7 +38,8 @@ router.put(
       check('address', 'Address is required').not().isEmpty(),
       check('phone', 'Phone number is required').not().isEmpty(),
       check('date_of_birth', 'Date of birth is required').not().isEmpty(),
-      check('gender', 'Gender is required').isIn(['Male', 'Female', 'Other'])
+      check('gender', 'Gender is required').isIn(['Male', 'Female']),
+      check('profile_photo', 'Profile photo is required').not().isEmpty()
     ]
   ],
   async (req, res) => {

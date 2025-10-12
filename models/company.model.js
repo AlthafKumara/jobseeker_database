@@ -18,6 +18,10 @@ const companySchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  logo: {
+    type: String,
+    default: ''
+  },
   isProfileComplete: {
     type: Boolean,
     default: false

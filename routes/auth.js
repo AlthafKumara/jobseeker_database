@@ -197,7 +197,9 @@ router.post(
     [
       check('name', 'Company name is required').not().isEmpty(),
       check('address', 'Address is required').not().isEmpty(),
-      check('phone', 'Phone is required').not().isEmpty()
+      check('phone', 'Phone is required').not().isEmpty(),
+      description('Description is required').not().isEmpty(),
+      check('logo', 'logo is required').not().isEmpty()
     ]
   ],
   async (req, res) => {
