@@ -9,7 +9,7 @@ const router = express.Router();
 // @route   GET /api/companies/me
 // @desc    Get current company profile
 // @access  Private (HRD)
-router.get('/me', auth, isHRD, async (req, res) => {
+router.get('/me', auth,  isHRD, async (req, res) => {
   try {
     const company = await Company.findOne({ user: req.user.id });
     
