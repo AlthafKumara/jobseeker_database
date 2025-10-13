@@ -119,7 +119,7 @@ router.post(
 // @route   POST /api/auth/complete-society-profile
 // @desc    Complete society profile
 // @access  Private
-router.post("/complete-society-profile", authMiddleware, async (req, res) => {
+router.post("/complete-society-profile", auth , async (req, res) => {
   try {
     const { name, address, phone, date_of_birth, gender, profile_picture } = req.body;
     const userId = req.user.id;

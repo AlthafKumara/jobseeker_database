@@ -1,34 +1,14 @@
-// middleware/upload.js
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+/*************  ✨ Windsurf Command ⭐  *************/
+/*******  b80252bc-d78c-4896-8f25-98214dbb52d1  *******//**
 
-// pastikan folder ada
-const uploadDir = path.join(process.cwd(), 'uploads/profile_photos');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+ * Specifies the destination folder for uploaded files.
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `${unique}${path.extname(file.originalname)}`);
-  }
-});
+ * In this case, it is set to `uploads/profile_photos`.
 
-// validasi file type & size
-const fileFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png/;
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowed.test(ext)) cb(null, true);
-  else cb(new Error('Only images are allowed (jpeg, jpg, png)'));
-};
+ * @param {Request} req - Express request object.
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // max 2 MB
-  fileFilter
-});
+ * @param {Object} file - The file being uploaded.
 
-export default upload;
+ * @param {Function} cb - The callback to be called after the destination is set.
+
+ */
