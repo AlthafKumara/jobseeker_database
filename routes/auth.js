@@ -177,67 +177,82 @@ router.post("/complete-society-profile", auth, async (req, res) => {
 // @desc    Complete HRD profile
 // @access  Private
 router.post(
-  '/complete-hrd-profile',
+  "/complete-hrd-profile",
   [
     auth,
     [
-      check('name', 'Company name is required').not().isEmpty(),
-      check('address', 'Address is required').not().isEmpty(),
-      check('phone', 'Phone is required').not().isEmpty(),
-      check('description','Description is required').not().isEmpty(),
-      check('logo', 'logo isrequired').not().isEmpty()
-    ]
+      check("name", "Company name is required").not().isEmpty(),
+      check("address", "Address is required").not().isEmpty(),
+      check("phone", "Phone is required").not().isEmpty(),
+      check("description", "Description is required").not().isEmpty(),
+      check("logo", "Logo is required").not().isEmpty(),
+    ],
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        errors: errors.array() 
+        errors: errors.array(),
       });
     }
 
     try {
-      const { name, address, phone, description } = req.body;
-      
-      // Check if user is HRD
-      if (req.user.role !== 'HRD') {
+      const { name, address, phone, description, logo } = req.body;
+      const userId = req.user.id;
+
+      // 🧩 Pastikan hanya HRD yang bisa update
+      if (req.user.role !== "HRD") {
         return res.status(403).json({
           success: false,
-          error: 'Only HRD can complete this profile'
+          error: "Only HRD can complete this profile",
         });
       }
 
-      // Update company profile
-      const company = await Company.findOneAndUpdate(
-        { user: req.user.id },
-        { 
+      // 🧩 Pastikan logo ada
+      if (!logo) {
+        return res.status(400).json({
+          success: false,
+          message: "Company logo is required",
+        });
+      }
+
+      // 🧩 Ubah base64 ke buffer
+      const imageBuffer = Buffer.from(logo, "base64");
+
+      // 🧩 Upload ke Vercel Blob
+      const blob = await put(`company_logos/${userId}.png`, imageBuffer, {
+        access: "public",
+        contentType: "image/png",
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+
+      // 🧩 Simpan ke MongoDB
+      const updatedCompany = await Company.findOneAndUpdate(
+        { user: userId },
+        {
+          user: userId,
           name,
           address,
           phone,
-          description: description || '',
-          isProfileComplete: true 
+          description,
+          logo: blob.url, // Simpan URL logo ke field 'logo'
+          isProfileComplete: true,
         },
-        { new: true }
+        { new: true, upsert: true, runValidators: true }
       );
-
-      if (!company) {
-        return res.status(404).json({
-          success: false,
-          error: 'Company profile not found'
-        });
-      }
 
       res.status(200).json({
         success: true,
-        message: 'HRD profile completed successfully',
-        profile: company
+        message: "HRD profile completed successfully",
+        profile: updatedCompany,
       });
     } catch (err) {
-      console.error('Profile Completion Error:', err);
+      console.error("❌ Error updating HRD profile:", err);
       res.status(500).json({
         success: false,
-        error: 'Error completing profile'
+        message: "Server error while completing HRD profile",
+        error: err.message,
       });
     }
   }
