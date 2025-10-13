@@ -119,40 +119,39 @@ router.post(
 // @route   POST /api/auth/complete-society-profile
 // @desc    Complete society profile
 // @access  Private
-router.post("/complete-society-profile", auth , async (req, res) => {
+router.post("/complete-society-profile", auth, async (req, res) => {
   try {
-    const { name, address, phone, date_of_birth, gender, profile_picture } = req.body;
+    const { name, address, phone, date_of_birth, gender, profile_photo } = req.body;
     const userId = req.user.id;
 
-    if (!profile_picture) {
-      return res.status(400).json({ success: false, message: "Profile picture is required" });
+    if (!profile_photo) {
+      return res.status(400).json({ success: false, message: "Profile photo is required" });
     }
 
-    // ⬇️ Ubah base64 ke buffer
-    const imageBuffer = Buffer.from(profile_picture, "base64");
+    // 🧩 Ubah base64 ke buffer
+    const imageBuffer = Buffer.from(profile_photo, "base64");
 
-    // ⬇️ Upload ke Vercel Blob
+    // 🧩 Upload ke Vercel Blob
     const blob = await put(`profile_photos/${userId}.png`, imageBuffer, {
       access: "public",
       contentType: "image/png",
       token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
-    // blob.url berisi link publik ke gambar, misalnya:
-    // https://your-app-name.public.blob.vercel-storage.com/profile_photos/xxxx.png
-
-    // Simpan data ke MongoDB
+    // 🧩 Simpan ke MongoDB
     const updatedSociety = await Society.findOneAndUpdate(
-      { userId },
+      { user: userId }, // sesuai schema
       {
+        user: userId,
         name,
         address,
         phone,
         date_of_birth,
         gender,
-        profile_picture: blob.url, // simpan URL gambar
+        profile_photo: blob.url, // sesuai schema (profile_photo)
+        isProfileComplete: true,
       },
-      { new: true, upsert: true }
+      { new: true, upsert: true, runValidators: true }
     );
 
     res.status(200).json({
@@ -160,8 +159,9 @@ router.post("/complete-society-profile", auth , async (req, res) => {
       message: "Profile updated successfully",
       profile: updatedSociety,
     });
+
   } catch (error) {
-    console.error("Error updating profile:", error);
+    console.error("❌ Error updating profile:", error);
     res.status(500).json({
       success: false,
       message: "Server error while updating profile",
@@ -169,6 +169,7 @@ router.post("/complete-society-profile", auth , async (req, res) => {
     });
   }
 });
+
 
 
 
