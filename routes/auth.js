@@ -6,6 +6,7 @@ const User = require('../models/user.model');
 const Society = require('../models/society.model');
 const Company = require('../models/company.model');
 const { auth } = require('../middleware/auth');
+const {upload} = require('../middleware/upload');
 
 const router = express.Router();
 
