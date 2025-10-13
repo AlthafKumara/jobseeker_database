@@ -120,72 +120,63 @@ router.post(
 // @access  Private
 router.post(
   '/complete-society-profile',
+  auth,
+  upload.single('profile_photo'), // <--- multer middleware
   [
-    auth,
-    [
-      check('name', 'Name is required').not().isEmpty(),
-      check('address', 'Address is required').not().isEmpty(),
-      check('phone', 'Phone is required').not().isEmpty(),
-      check('date_of_birth', 'Date of birth is required').isISO8601(),
-      check('gender', 'Gender is required').isIn(['Male', 'Female', 'Other']),
-      check('profile_picture', 'Profile picture is required').not().isEmpty()
-    ]
+    check('name', 'Name is required').not().isEmpty(),
+    check('address', 'Address is required').not().isEmpty(),
+    check('phone', 'Phone is required').not().isEmpty(),
+    check('date_of_birth', 'Date of birth is required').isISO8601(),
+    check('gender', 'Gender is required').isIn(['Male', 'Female', 'Other']),
+    // jangan cek profile_picture lewat check karena kita pakai multipart
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        success: false,
-        errors: errors.array() 
-      });
+      // jika file telah diupload tapi validasi gagal, bisa hapus file (opsional)
+      return res.status(400).json({ success: false, errors: errors.array() });
     }
 
     try {
       const { name, address, phone, date_of_birth, gender } = req.body;
-      
-      // Check if user is a society
+
       if (req.user.role !== 'Society') {
-        return res.status(403).json({
-          success: false,
-          error: 'Only society members can complete this profile'
-        });
+        return res.status(403).json({ success: false, error: 'Only society members can complete this profile' });
       }
 
-      // Update society profile
+      // bangun URL penuh -> req.protocol://host + path
+      let profile_photo = '';
+      if (req.file) {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        profile_photo = `${baseUrl}/uploads/profile_photos/${req.file.filename}`;
+      }
+
       const society = await Society.findOneAndUpdate(
         { user: req.user.id },
-        { 
+        {
           name,
           address,
           phone,
           date_of_birth,
           gender,
-          isProfileComplete: true 
+          profile_photo,
+          isProfileComplete: true
         },
-        { new: true }
+        { new: true, upsert: false }
       );
 
       if (!society) {
-        return res.status(404).json({
-          success: false,
-          error: 'Society profile not found'
-        });
+        return res.status(404).json({ success: false, error: 'Society profile not found' });
       }
 
-      res.status(200).json({
-        success: true,
-        message: 'Society profile completed successfully',
-        profile: society
-      });
+      res.status(200).json({ success: true, message: 'Society profile completed successfully', profile: society });
     } catch (err) {
       console.error('Profile Completion Error:', err);
-      res.status(500).json({
-        success: false,
-        error: 'Error completing profile'
-      });
+      res.status(500).json({ success: false, error: 'Error completing profile' });
     }
   }
 );
+
 
 // @route   POST /api/auth/complete-hrd-profile
 // @desc    Complete HRD profile
