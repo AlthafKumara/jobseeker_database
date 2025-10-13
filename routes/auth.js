@@ -119,64 +119,57 @@ router.post(
 // @route   POST /api/auth/complete-society-profile
 // @desc    Complete society profile
 // @access  Private
-router.post(
-  '/complete-society-profile',
-  auth,
-  upload.single('profile_photo'), // <--- multer middleware
-  [
-    check('name', 'Name is required').not().isEmpty(),
-    check('address', 'Address is required').not().isEmpty(),
-    check('phone', 'Phone is required').not().isEmpty(),
-    check('date_of_birth', 'Date of birth is required').isISO8601(),
-    check('gender', 'Gender is required').isIn(['Male', 'Female', 'Other']),
-    // jangan cek profile_picture lewat check karena kita pakai multipart
-  ],
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      // jika file telah diupload tapi validasi gagal, bisa hapus file (opsional)
-      return res.status(400).json({ success: false, errors: errors.array() });
+router.post("/complete-society-profile", authMiddleware, async (req, res) => {
+  try {
+    const { name, address, phone, date_of_birth, gender, profile_picture } = req.body;
+    const userId = req.user.id;
+
+    if (!profile_picture) {
+      return res.status(400).json({ success: false, message: "Profile picture is required" });
     }
 
-    try {
-      const { name, address, phone, date_of_birth, gender } = req.body;
+    // ⬇️ Ubah base64 ke buffer
+    const imageBuffer = Buffer.from(profile_picture, "base64");
 
-      if (req.user.role !== 'Society') {
-        return res.status(403).json({ success: false, error: 'Only society members can complete this profile' });
-      }
+    // ⬇️ Upload ke Vercel Blob
+    const blob = await put(`profile_photos/${userId}.png`, imageBuffer, {
+      access: "public",
+      contentType: "image/png",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
 
-      // bangun URL penuh -> req.protocol://host + path
-      let profile_photo = '';
-      if (req.file) {
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        profile_photo = `${baseUrl}/uploads/profile_photos/${req.file.filename}`;
-      }
+    // blob.url berisi link publik ke gambar, misalnya:
+    // https://your-app-name.public.blob.vercel-storage.com/profile_photos/xxxx.png
 
-      const society = await Society.findOneAndUpdate(
-        { user: req.user.id },
-        {
-          name,
-          address,
-          phone,
-          date_of_birth,
-          gender,
-          profile_photo,
-          isProfileComplete: true
-        },
-        { new: true, upsert: false }
-      );
+    // Simpan data ke MongoDB
+    const updatedSociety = await Society.findOneAndUpdate(
+      { userId },
+      {
+        name,
+        address,
+        phone,
+        date_of_birth,
+        gender,
+        profile_picture: blob.url, // simpan URL gambar
+      },
+      { new: true, upsert: true }
+    );
 
-      if (!society) {
-        return res.status(404).json({ success: false, error: 'Society profile not found' });
-      }
-
-      res.status(200).json({ success: true, message: 'Society profile completed successfully', profile: society });
-    } catch (err) {
-      console.error('Profile Completion Error:', err);
-      res.status(500).json({ success: false, error: 'Error completing profile' });
-    }
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      profile: updatedSociety,
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating profile",
+      error: error.message,
+    });
   }
-);
+});
+
 
 
 // @route   POST /api/auth/complete-hrd-profile
