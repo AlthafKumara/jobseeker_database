@@ -29,45 +29,47 @@ router.get('/me', auth,  isHRD, async (req, res) => {
 // @access  Private (HRD)
 router.put(
   '/me',
-  [
-    auth,
-    isHRD,
-    [
-      check('name', 'Name is required').not().isEmpty(),
-      check('address', 'Address is required').not().isEmpty(),
-      check('phone', 'Phone number is required').not().isEmpty(),
-      check('description','Description is required').not().isEmpty(),
-      check('logo', 'Logo is required').not().isEmpty()
-    ]
-  ],
+  [auth, isHRD],
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { name, address, phone, description } = req.body;
-
     try {
-      let company = await Company.findOne({ user: req.user.id });
-
+      const company = await Company.findOne({ user: req.user.id });
       if (!company) {
-        return res.status(400).json({ msg: 'Company not found' });
+        return res.status(404).json({ msg: 'Company not found' });
       }
 
-      // Update company
-      company = await Company.findByIdAndUpdate(
+      // Ambil semua field dari request body
+      const { name, address, phone, description, logo } = req.body;
+
+      // Buat objek update hanya dari field yang dikirim
+      const updateFields = {};
+      if (name) updateFields.name = name;
+      if (address) updateFields.address = address;
+      if (phone) updateFields.phone = phone;
+      if (description) updateFields.description = description;
+      if (logo) {
+        // Jika logo dikirim dalam base64 → upload ke Vercel Blob di sini
+        const logoUrl = await uploadBase64ToVercelBlob(logo);
+        updateFields.logo = logoUrl;
+      }
+
+      // Update hanya field yang dikirim
+      const updatedCompany = await Company.findByIdAndUpdate(
         company._id,
-        { $set: { name, address, phone, description } },
+        { $set: updateFields },
         { new: true }
       );
 
-      res.json(company);
+      return res.json({
+        success: true,
+        profile: updatedCompany,
+        message: 'Company profile updated successfully',
+      });
     } catch (err) {
       console.error(err.message);
       res.status(500).send('Server Error');
     }
   }
 );
+
 
 module.exports = router;
