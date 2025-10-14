@@ -1,102 +1,68 @@
-const express = require("express");
-const { auth, isHRD } = require("../middleware/auth");
-const Company = require("../models/company.model");
-const { put } = require("@vercel/blob");
+const express = require('express');
+const multer = require('multer');
+const { auth, isHRD } = require('../middleware/auth');
+const Company = require('../models/company.model');
+const { uploadBufferToVercelBlob } = require('../utils/vercelBlob'); // fungsi upload ke blob (kita buat di bawah)
 
 const router = express.Router();
 
-// 🧠 Fungsi bantu untuk upload Base64 ke Vercel Blob
-async function uploadBase64ToVercelBlob(base64Data, userId) {
-  // Hilangkan prefix base64 jika ada (contoh: "data:image/png;base64,")
-  const cleanedBase64 = base64Data.replace(/^data:image\/\w+;base64,/, "");
+// Konfigurasi multer (in-memory)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // Maksimum 10MB
+});
 
-  // Convert ke Buffer
-  const imageBuffer = Buffer.from(cleanedBase64, "base64");
-
-  // Upload ke Vercel Blob
-  const blob = await put(`company_logos/${userId}.png`, imageBuffer, {
-    access: "public",
-    contentType: "image/png",
-    token: process.env.BLOB_READ_WRITE_TOKEN, // pastikan env ini diset di Vercel
-  });
-
-  return blob.url;
-}
-
-// ========================== ROUTES ==========================
-
-// @route   GET /api/companies/me
-// @desc    Get current company profile
-// @access  Private (HRD)
-router.get("/me", auth, isHRD, async (req, res) => {
+// ✅ GET company profile (tidak perlu diubah)
+router.get('/me', auth, isHRD, async (req, res) => {
   try {
     const company = await Company.findOne({ user: req.user.id });
-
     if (!company) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No company profile found" });
+      return res.status(400).json({ msg: 'No company profile found' });
     }
-
-    res.json({ success: true, profile: company });
+    res.json(company);
   } catch (err) {
-    console.error("❌ Error fetching company profile:", err);
-    res.status(500).json({ success: false, message: "Server Error" });
+    console.error(err.message);
+    res.status(500).send('Server Error');
   }
 });
 
-// @route   PUT /api/companies/me
-// @desc    Update company profile + upload logo
-// @access  Private (HRD)
-router.put("/me", [auth, isHRD], async (req, res) => {
+// ✅ PUT company profile (upload logo pakai multer)
+router.put('/me', auth, isHRD, upload.single('logo'), async (req, res) => {
   try {
     const company = await Company.findOne({ user: req.user.id });
     if (!company) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Company not found" });
+      return res.status(404).json({ msg: 'Company not found' });
     }
 
-    const { name, address, phone, description, logo } = req.body;
-
+    const { name, address, phone, description } = req.body;
     const updateFields = {};
+
     if (name) updateFields.name = name;
     if (address) updateFields.address = address;
     if (phone) updateFields.phone = phone;
     if (description) updateFields.description = description;
 
-    // Jika ada logo dikirim → upload ke Vercel Blob
-    if (logo) {
-      try {
-        const logoUrl = await uploadBase64ToVercelBlob(logo, req.user.id);
-        updateFields.logo = logoUrl;
-      } catch (uploadErr) {
-        console.error("❌ Error uploading logo to Vercel Blob:", uploadErr);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to upload logo to storage",
-        });
-      }
+    if (req.file) {
+      const buffer = req.file.buffer;
+      const fileName = `${req.user.id}-${Date.now()}.png`;
+      const logoUrl = await uploadBufferToVercelBlob(buffer, fileName);
+      updateFields.logo = logoUrl;
     }
 
-    // Update data di MongoDB
     const updatedCompany = await Company.findByIdAndUpdate(
       company._id,
       { $set: updateFields },
       { new: true }
     );
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Company profile updated successfully",
       profile: updatedCompany,
+      message: 'Company profile updated successfully',
     });
   } catch (err) {
-    console.error("❌ Server error updating company profile:", err);
-    res.status(500).json({
-      success: false,
-      message: "Server error while updating company profile",
-    });
+    console.error('❌ Error updating company:', err.message);
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
 
