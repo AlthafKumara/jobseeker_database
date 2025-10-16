@@ -1,7 +1,10 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
+const TokenBlacklist = require('../models/tokenblacklist.model'); 
+const Company = require('../models/company.model'); 
+const Society = require('../models/society.model');
 
-// Middleware to verify JWT token
+// Middleware to authenticate user
 exports.auth = async (req, res, next) => {
   // Get token from header
   const token = req.header('x-auth-token');
@@ -11,16 +14,23 @@ exports.auth = async (req, res, next) => {
     return res.status(401).json({ msg: 'No token, authorization denied' });
   }
 
-  // Verify token
   try {
+    // 🆕 Cek apakah token sudah di-blacklist
+    const blacklisted = await TokenBlacklist.findOne({ token });
+    if (blacklisted) {
+      return res.status(401).json({ msg: 'Token has been invalidated (logout)' });
+    }
+
+    // ✅ Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded.user;
+
     next();
   } catch (err) {
+    console.error('Auth Middleware Error:', err);
     res.status(401).json({ msg: 'Token is not valid' });
   }
 };
-
 // Middleware to check if user is HRD
 exports.isHRD = (req, res, next) => {
   if (req.user && req.user.role === 'HRD') {

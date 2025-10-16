@@ -159,7 +159,7 @@ router.post('/:id/apply', [auth, isSociety], async (req, res) => {
       return res.status(400).json({ msg: 'This position is not currently accepting applications' });
     }
 
-    const society = await Society.findOne({ user: req.user.id });
+    const society = await Society.findOne({ user: req.user.id }); 
     const existingApplication = await PositionApplied.findOne({
       available_position: req.params.id,
       society: society._id

@@ -7,6 +7,7 @@ const Society = require('../models/society.model');
 const Company = require('../models/company.model');
 const { auth } = require('../middleware/auth');
 const {put} = require('@vercel/blob');
+const TokenBlacklist = require('../models/tokenblacklist.model');
 
 const router = express.Router();
 
@@ -354,5 +355,31 @@ router.post(
     }
   }
 );
+router.post('/logout', auth, async (req, res) => {
+  try {
+    const token = req.header('x-auth-token');
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'No token provided' });
+    }
+
+    const decoded = jwt.decode(token);
+    const expiresAt = new Date(decoded.exp * 1000); // waktu kadaluarsa JWT
+
+    // Simpan token ke blacklist
+    await new TokenBlacklist({ token, expiresAt }).save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Logout successful, token blacklisted'
+    });
+  } catch (error) {
+    console.error('Logout Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during logout',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;
