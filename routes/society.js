@@ -4,6 +4,7 @@ const { auth, isSociety } = require('../middleware/auth');
 const Society = require('../models/society.model');
 const Portfolio = require('../models/portfolio.model');
 const PositionApplied = require('../models/positionApplied.model');
+const { uploadBufferToVercelBlob } = require('../utils/vercelBlob');
 
 const router = express.Router();
 
@@ -34,13 +35,17 @@ router.put(
     auth,
     isSociety,
     [
-      check('name', 'Name is required').not().isEmpty(),
-      check('address', 'Address is required').not().isEmpty(),
-      check('phone', 'Phone number is required').not().isEmpty(),
-      check('date_of_birth', 'Date of birth is required').not().isEmpty(),
-      check('gender', 'Gender is required').isIn(['Male', 'Female']),
-      check('profile_photo', 'Profile photo is required').not().isEmpty()
-    ]
+      // semua optional supaya bisa update sebagian data
+      check('name').optional().isString().withMessage('Invalid name'),
+      check('address').optional().isString().withMessage('Invalid address'),
+      check('phone').optional().isString().withMessage('Invalid phone'),
+      check('date_of_birth').optional().isString().withMessage('Invalid date'),
+      check('gender')
+        .optional()
+        .isIn(['Male', 'Female'])
+        .withMessage('Gender must be Male or Female'),
+      check('profile_photo').optional().isString().withMessage('Invalid photo data'),
+    ],
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -54,18 +59,32 @@ router.put(
       let society = await Society.findOne({ user: req.user.id });
 
       if (!society) {
-        return res.status(400).json({ msg: 'Society not found' });
+        return res.status(404).json({ msg: 'Society not found' });
       }
 
-      // Update society
-      // Build update object with only provided fields
       const updateFields = {};
       if (name) updateFields.name = name;
       if (address) updateFields.address = address;
       if (phone) updateFields.phone = phone;
       if (date_of_birth) updateFields.date_of_birth = date_of_birth;
       if (gender) updateFields.gender = gender;
-      if (profile_photo !== undefined) updateFields.profile_photo = profile_photo;
+
+      // ✅ Jika ada foto base64, upload ke Vercel Blob
+      if (profile_photo && profile_photo.startsWith('/9j')) {
+        const buffer = Buffer.from(profile_photo, 'base64');
+        const fileName = `profile_${society._id}_${Date.now()}.jpg`;
+
+        try {
+          const photoUrl = await uploadBufferToVercelBlob(buffer, fileName);
+          updateFields.profile_photo = photoUrl;
+        } catch (uploadErr) {
+          console.error('❌ Gagal upload ke Vercel Blob:', uploadErr);
+          return res.status(500).json({
+            error: 'Gagal upload foto ke Vercel Blob',
+            details: uploadErr.message,
+          });
+        }
+      }
 
       society = await Society.findByIdAndUpdate(
         society._id,
@@ -73,10 +92,14 @@ router.put(
         { new: true }
       );
 
-      res.json(society);
+      res.json({
+        success: true,
+        message: 'Profile updated successfully',
+        profile: society,
+      });
     } catch (err) {
-      console.error(err.message);
-      res.status(500).send('Server Error');
+      console.error('❌ Server Error:', err);
+      res.status(500).json({ error: 'Something went wrong!', details: err.message });
     }
   }
 );
@@ -94,7 +117,7 @@ router.post(
       check('description', 'Description is required').not().isEmpty(),
       check('file', 'File is required').not().isEmpty()
     ]
-  ],
+  ],    
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
