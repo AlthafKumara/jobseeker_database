@@ -153,6 +153,41 @@ router.get('/portfolio', auth, isSociety, async (req, res) => {
   }
 });
 
+// ✅ GET Portfolio Detail by ID
+router.get('/portfolio/:id', auth, isSociety, async (req, res) => {
+  try {
+    const society = await Society.findOne({ user: req.user.id });
+    if (!society) {
+      return res.status(404).json({ success: false, message: 'Society not found' });
+    }
+
+    const portfolio = await Portfolio.findOne({
+      _id: req.params.id,
+      society: society._id, // pastikan hanya milik user ini
+    });
+
+    if (!portfolio) {
+      return res.status(404).json({
+        success: false,
+        message: 'Portfolio not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: portfolio,
+    });
+  } catch (err) {
+    console.error('❌ Error getting portfolio detail:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: err.message,
+    });
+  }
+});
+
+
 // ✅ PUT Update Portfolio
 router.put('/portfolio/:id', auth, isSociety, upload.single('file'), async (req, res) => {
   try {
