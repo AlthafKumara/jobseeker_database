@@ -3,16 +3,17 @@ const mongoose = require('mongoose');
 const portfolioSchema = new mongoose.Schema({
   skills: [{
     type: String,
-    required: true,
+    default: '',
     trim: true
   }],
   description: {
     type: String,
-    required: true
+    required: true,
+    default: ''
   },
   file: {
     type: String,
-    required: true
+    default: ''
   },
   society: {
     type: mongoose.Schema.Types.ObjectId,
