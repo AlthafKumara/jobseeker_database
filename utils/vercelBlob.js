@@ -5,7 +5,7 @@ async function uploadBufferToVercelBlob(buffer, fileName) {
     access: 'public',
     contentType: 'image/png',
   });
-  return blob.url; // kembalikan URL yang bisa diakses publik
+  return blob.url; 
 }
 
 module.exports = { uploadBufferToVercelBlob };

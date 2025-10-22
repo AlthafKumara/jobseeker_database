@@ -3,6 +3,8 @@ const multer = require('multer');
 const { auth, isSociety } = require('../middleware/auth');
 const Society = require('../models/society.model');
 const { uploadBufferToVercelBlob } = require('../utils/vercelBlob');
+const Portfolio = require('../models/portfolio.model');
+const Skill = require('../models/skill.model');
 
 const router = express.Router();
 
@@ -66,5 +68,91 @@ router.put('/me', auth, isSociety, upload.single('profile_photo'), async (req, r
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
+
+
+
+// ✅ POST Tambah Portfolio
+router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, res) => {
+  try {
+    const society = await Society.findOne({ user: req.user.id });
+    if (!society) {
+      return res.status(404).json({ success: false, message: 'Society not found' });
+    }
+
+    const { skills, description } = req.body;
+
+    // Validasi input
+    if (!skills || !description || !req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Skills, description, and file are required'
+      });
+    }
+
+    // Upload file ke Vercel Blob
+    const buffer = req.file.buffer;
+    const fileName = `${req.user.id}-portfolio-${Date.now()}-${req.file.originalname}`;
+    const fileUrl = await uploadBufferToVercelBlob(buffer, fileName);
+
+    // Konversi skills (bisa string CSV atau array JSON)
+    let skillArray;
+    try {
+      skillArray = typeof skills === 'string' ? JSON.parse(skills) : skills;
+      if (!Array.isArray(skillArray)) throw new Error();
+    } catch {
+      skillArray = skills.split(',').map(s => s.trim());
+    }
+
+    // Simpan ke database
+    const newPortfolio = new Portfolio({
+      skills: skillArray,
+      description,
+      file: fileUrl,
+      society: society._id
+    });
+
+    await newPortfolio.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Portfolio added successfully',
+      data: newPortfolio
+    });
+  } catch (err) {
+    console.error('❌ Error adding portfolio:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: err.message
+    });
+  }
+});
+
+// ✅ GET List Portfolio milik Society yang login
+router.get('/portfolio', auth, isSociety, async (req, res) => {
+  try {
+    const society = await Society.findOne({ user: req.user.id });
+    if (!society) {
+      return res.status(404).json({ success: false, message: 'Society not found' });
+    }
+
+    const portfolios = await Portfolio.find({ society: society._id })
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: portfolios
+    });
+  } catch (err) {
+    console.error('❌ Error getting portfolios:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: err.message
+    });
+  }
+});
+
+
 
 module.exports = router;
