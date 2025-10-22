@@ -153,6 +153,109 @@ router.get('/portfolio', auth, isSociety, async (req, res) => {
   }
 });
 
+// ✅ PUT Update Portfolio
+router.put('/portfolio/:id', auth, isSociety, upload.single('file'), async (req, res) => {
+  try {
+    const society = await Society.findOne({ user: req.user.id });
+    if (!society) {
+      return res.status(404).json({ success: false, message: 'Society not found' });
+    }
+
+    const portfolio = await Portfolio.findOne({
+      _id: req.params.id,
+      society: society._id
+    });
+
+    if (!portfolio) {
+      return res.status(404).json({
+        success: false,
+        message: 'Portfolio not found'
+      });
+    }
+
+    const { skills, description } = req.body;
+    const updateFields = {};
+
+    if (skills) {
+      try {
+        const parsedSkills = typeof skills === 'string' ? JSON.parse(skills) : skills;
+        updateFields.skills = Array.isArray(parsedSkills)
+          ? parsedSkills
+          : skills.split(',').map(s => s.trim());
+      } catch {
+        updateFields.skills = skills.split(',').map(s => s.trim());
+      }
+    }
+
+    if (description) updateFields.description = description;
+
+    // Jika ada file baru, upload ke Vercel Blob
+    if (req.file) {
+      const buffer = req.file.buffer;
+      const fileName = `${req.user.id}-portfolio-${Date.now()}-${req.file.originalname}`;
+      const fileUrl = await uploadBufferToVercelBlob(buffer, fileName);
+      updateFields.file = fileUrl;
+    }
+
+    const updatedPortfolio = await Portfolio.findByIdAndUpdate(
+      portfolio._id,
+      { $set: updateFields },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Portfolio updated successfully',
+      data: updatedPortfolio
+    });
+  } catch (err) {
+    console.error('❌ Error updating portfolio:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: err.message
+    });
+  }
+});
+
+
+// ✅ DELETE Hapus Portfolio
+router.delete('/portfolio/:id', auth, isSociety, async (req, res) => {
+  try {
+    const society = await Society.findOne({ user: req.user.id });
+    if (!society) {
+      return res.status(404).json({ success: false, message: 'Society not found' });
+    }
+
+    const portfolio = await Portfolio.findOne({
+      _id: req.params.id,
+      society: society._id
+    });
+
+    if (!portfolio) {
+      return res.status(404).json({
+        success: false,
+        message: 'Portfolio not found'
+      });
+    }
+
+    await Portfolio.deleteOne({ _id: portfolio._id });
+
+    res.json({
+      success: true,
+      message: 'Portfolio deleted successfully'
+    });
+  } catch (err) {
+    console.error('❌ Error deleting portfolio:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: err.message
+    });
+  }
+});
+
+
 
 
 module.exports = router;
