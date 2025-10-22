@@ -80,35 +80,40 @@ router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, re
     }
 
     const { skills, description } = req.body;
+    let fileUrl;
 
-    // Validasi input
-    if (!skills || !description || !req.file) {
+    // ✅ Upload file kalau ada
+    if (req.file) {
+      const buffer = req.file.buffer;
+      const fileName = `${req.user.id}-portfolio-${Date.now()}-${req.file.originalname}`;
+      fileUrl = await uploadBufferToVercelBlob(buffer, fileName);
+    }
+
+    // ✅ Parse skills kalau dikirim (bisa JSON / CSV)
+    let skillArray = [];
+    if (skills) {
+      try {
+        skillArray = typeof skills === 'string' ? JSON.parse(skills) : skills;
+        if (!Array.isArray(skillArray)) throw new Error();
+      } catch {
+        skillArray = skills.split(',').map(s => s.trim());
+      }
+    }
+
+    // ✅ Validasi minimal harus ada 1 field
+    if (!skills && !description && !req.file) {
       return res.status(400).json({
         success: false,
-        message: 'Skills, description, and file are required'
+        message: 'At least one of skills, description, or file is required',
       });
     }
 
-    // Upload file ke Vercel Blob
-    const buffer = req.file.buffer;
-    const fileName = `${req.user.id}-portfolio-${Date.now()}-${req.file.originalname}`;
-    const fileUrl = await uploadBufferToVercelBlob(buffer, fileName);
-
-    // Konversi skills (bisa string CSV atau array JSON)
-    let skillArray;
-    try {
-      skillArray = typeof skills === 'string' ? JSON.parse(skills) : skills;
-      if (!Array.isArray(skillArray)) throw new Error();
-    } catch {
-      skillArray = skills.split(',').map(s => s.trim());
-    }
-
-    // Simpan ke database
+    // ✅ Buat portfolio baru
     const newPortfolio = new Portfolio({
-      skills: skillArray,
-      description,
-      file: fileUrl,
-      society: society._id
+      skills: skillArray || [],
+      description: description || '',
+      file: fileUrl || '',
+      society: society._id,
     });
 
     await newPortfolio.save();
@@ -116,17 +121,18 @@ router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, re
     res.status(201).json({
       success: true,
       message: 'Portfolio added successfully',
-      data: newPortfolio
+      data: newPortfolio,
     });
   } catch (err) {
     console.error('❌ Error adding portfolio:', err.message);
     res.status(500).json({
       success: false,
       message: 'Server Error',
-      error: err.message
+      error: err.message,
     });
   }
 });
+
 
 // ✅ GET List Portfolio milik Society yang login
 router.get('/portfolio', auth, isSociety, async (req, res) => {
