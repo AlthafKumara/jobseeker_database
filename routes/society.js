@@ -2,38 +2,37 @@ const express = require('express');
 const multer = require('multer');
 const { auth, isSociety } = require('../middleware/auth');
 const Society = require('../models/society.model');
-const { uploadBufferToVercelBlob } = require('../utils/vercelBlob');
 const Portfolio = require('../models/portfolio.model');
-const Skill = require('../models/skill.model');
+const { uploadBufferToVercelBlob, deleteFromVercelBlob } = require('../utils/vercelBlob');
 
 const router = express.Router();
 
 // Konfigurasi multer (in-memory)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // max 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // Maks 10MB
 });
 
-// ✅ GET Profile (tidak diubah)
+// ✅ GET Society Profile
 router.get('/me', auth, isSociety, async (req, res) => {
   try {
     const society = await Society.findOne({ user: req.user.id });
     if (!society) {
-      return res.status(404).json({ msg: 'Society profile not found' });
+      return res.status(404).json({ success: false, message: 'Society profile not found' });
     }
-    res.json(society);
+    res.json({ success: true, data: society });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error('❌ Error:', err.message);
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
 
-// ✅ PUT Update Profile (pakai multer untuk upload foto)
+// ✅ PUT Update Society Profile (foto profil)
 router.put('/me', auth, isSociety, upload.single('profile_photo'), async (req, res) => {
   try {
     const society = await Society.findOne({ user: req.user.id });
     if (!society) {
-      return res.status(404).json({ msg: 'Society not found' });
+      return res.status(404).json({ success: false, message: 'Society not found' });
     }
 
     const { name, address, phone, date_of_birth, gender } = req.body;
@@ -46,9 +45,14 @@ router.put('/me', auth, isSociety, upload.single('profile_photo'), async (req, r
     if (gender) updateFields.gender = gender;
 
     if (req.file) {
+      // 🧹 Hapus foto lama kalau ada
+      if (society.profile_photo) {
+        await deleteFromVercelBlob(society.profile_photo);
+      }
+
       const buffer = req.file.buffer;
-      const fileName = `${req.user.id}-${Date.now()}.png`;
-      const photoUrl = await uploadBufferToVercelBlob(buffer, fileName);
+      const fileName = req.file.originalname;
+      const photoUrl = await uploadBufferToVercelBlob(buffer, fileName, req.file.mimetype);
       updateFields.profile_photo = photoUrl;
     }
 
@@ -58,18 +62,16 @@ router.put('/me', auth, isSociety, upload.single('profile_photo'), async (req, r
       { new: true }
     );
 
-    return res.json({
+    res.json({
       success: true,
-      profile: updatedSociety,
       message: 'Society profile updated successfully',
+      data: updatedSociety,
     });
   } catch (err) {
     console.error('❌ Error updating society:', err.message);
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
-
-
 
 // ✅ POST Tambah Portfolio
 router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, res) => {
@@ -85,11 +87,11 @@ router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, re
     // ✅ Upload file kalau ada
     if (req.file) {
       const buffer = req.file.buffer;
-      const fileName = `${req.user.id}-portfolio-${Date.now()}-${req.file.originalname}`;
-      fileUrl = await uploadBufferToVercelBlob(buffer, fileName);
+      const fileName = req.file.originalname;
+      fileUrl = await uploadBufferToVercelBlob(buffer, fileName, req.file.mimetype);
     }
 
-    // ✅ Parse skills kalau dikirim (bisa JSON / CSV)
+    // ✅ Parse skills
     let skillArray = [];
     if (skills) {
       try {
@@ -100,7 +102,7 @@ router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, re
       }
     }
 
-    // ✅ Validasi minimal harus ada 1 field
+    // ✅ Validasi minimal
     if (!skills && !description && !req.file) {
       return res.status(400).json({
         success: false,
@@ -108,7 +110,7 @@ router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, re
       });
     }
 
-    // ✅ Buat portfolio baru
+    // ✅ Simpan portfolio
     const newPortfolio = new Portfolio({
       skills: skillArray || [],
       description: description || '',
@@ -125,16 +127,11 @@ router.post('/portfolio', auth, isSociety, upload.single('file'), async (req, re
     });
   } catch (err) {
     console.error('❌ Error adding portfolio:', err.message);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: err.message,
-    });
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
 
-
-// ✅ GET List Portfolio milik Society yang login
+// ✅ GET Semua Portfolio
 router.get('/portfolio', auth, isSociety, async (req, res) => {
   try {
     const society = await Society.findOne({ user: req.user.id });
@@ -142,57 +139,23 @@ router.get('/portfolio', auth, isSociety, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Society not found' });
     }
 
-    const portfolios = await Portfolio.find({ society: society._id })
-      .sort({ createdAt: -1 });
+    const portfolios = await Portfolio.find({ society: society._id }).sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      data: portfolios
+      data: portfolios.map(p => ({
+        _id: p._id,
+        description: p.description,
+        skills: p.skills,
+        file: p.file,
+        fileName: p.file ? p.file.split('/').pop() : null, // hanya nama file
+      })),
     });
   } catch (err) {
     console.error('❌ Error getting portfolios:', err.message);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
-
-// ✅ GET Portfolio Detail by ID
-router.get('/portfolio/:id', auth, isSociety, async (req, res) => {
-  try {
-    const society = await Society.findOne({ user: req.user.id });
-    if (!society) {
-      return res.status(404).json({ success: false, message: 'Society not found' });
-    }
-
-    const portfolio = await Portfolio.findOne({
-      _id: req.params.id,
-      society: society._id, // pastikan hanya milik user ini
-    });
-
-    if (!portfolio) {
-      return res.status(404).json({
-        success: false,
-        message: 'Portfolio not found',
-      });
-    }
-
-    res.json({
-      success: true,
-      data: portfolio,
-    });
-  } catch (err) {
-    console.error('❌ Error getting portfolio detail:', err.message);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: err.message,
-    });
-  }
-});
-
 
 // ✅ PUT Update Portfolio
 router.put('/portfolio/:id', auth, isSociety, upload.single('file'), async (req, res) => {
@@ -202,16 +165,9 @@ router.put('/portfolio/:id', auth, isSociety, upload.single('file'), async (req,
       return res.status(404).json({ success: false, message: 'Society not found' });
     }
 
-    const portfolio = await Portfolio.findOne({
-      _id: req.params.id,
-      society: society._id
-    });
-
+    const portfolio = await Portfolio.findOne({ _id: req.params.id, society: society._id });
     if (!portfolio) {
-      return res.status(404).json({
-        success: false,
-        message: 'Portfolio not found'
-      });
+      return res.status(404).json({ success: false, message: 'Portfolio not found' });
     }
 
     const { skills, description } = req.body;
@@ -230,11 +186,15 @@ router.put('/portfolio/:id', auth, isSociety, upload.single('file'), async (req,
 
     if (description) updateFields.description = description;
 
-    // Jika ada file baru, upload ke Vercel Blob
     if (req.file) {
+      // 🧹 Hapus file lama
+      if (portfolio.file) {
+        await deleteFromVercelBlob(portfolio.file);
+      }
+
       const buffer = req.file.buffer;
-      const fileName = `${req.user.id}-portfolio-${Date.now()}-${req.file.originalname}`;
-      const fileUrl = await uploadBufferToVercelBlob(buffer, fileName);
+      const fileName = req.file.originalname;
+      const fileUrl = await uploadBufferToVercelBlob(buffer, fileName, req.file.mimetype);
       updateFields.file = fileUrl;
     }
 
@@ -247,18 +207,13 @@ router.put('/portfolio/:id', auth, isSociety, upload.single('file'), async (req,
     res.json({
       success: true,
       message: 'Portfolio updated successfully',
-      data: updatedPortfolio
+      data: updatedPortfolio,
     });
   } catch (err) {
     console.error('❌ Error updating portfolio:', err.message);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
-
 
 // ✅ DELETE Hapus Portfolio
 router.delete('/portfolio/:id', auth, isSociety, async (req, res) => {
@@ -268,35 +223,23 @@ router.delete('/portfolio/:id', auth, isSociety, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Society not found' });
     }
 
-    const portfolio = await Portfolio.findOne({
-      _id: req.params.id,
-      society: society._id
-    });
-
+    const portfolio = await Portfolio.findOne({ _id: req.params.id, society: society._id });
     if (!portfolio) {
-      return res.status(404).json({
-        success: false,
-        message: 'Portfolio not found'
-      });
+      return res.status(404).json({ success: false, message: 'Portfolio not found' });
+    }
+
+    // 🧹 Hapus file dari blob
+    if (portfolio.file) {
+      await deleteFromVercelBlob(portfolio.file);
     }
 
     await Portfolio.deleteOne({ _id: portfolio._id });
 
-    res.json({
-      success: true,
-      message: 'Portfolio deleted successfully'
-    });
+    res.json({ success: true, message: 'Portfolio deleted successfully' });
   } catch (err) {
     console.error('❌ Error deleting portfolio:', err.message);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
-
-
-
 
 module.exports = router;

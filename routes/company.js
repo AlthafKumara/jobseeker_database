@@ -2,36 +2,36 @@ const express = require('express');
 const multer = require('multer');
 const { auth, isHRD } = require('../middleware/auth');
 const Company = require('../models/company.model');
-const { uploadBufferToVercelBlob } = require('../utils/vercelBlob'); // fungsi upload ke blob (kita buat di bawah)
+const { uploadBufferToVercelBlob, deleteFromVercelBlob } = require('../utils/vercelBlob');
 
 const router = express.Router();
 
 // Konfigurasi multer (in-memory)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // Maksimum 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // Maks 10MB
 });
 
-// ✅ GET company profile (tidak perlu diubah)
+// ✅ GET company profile
 router.get('/me', auth, isHRD, async (req, res) => {
   try {
     const company = await Company.findOne({ user: req.user.id });
     if (!company) {
-      return res.status(400).json({ msg: 'No company profile found' });
+      return res.status(404).json({ success: false, message: 'Company profile not found' });
     }
-    res.json(company);
+    res.json({ success: true, data: company });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error('❌ Error:', err.message);
+    res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
 
-// ✅ PUT company profile (upload logo pakai multer)
+// ✅ PUT Update Company Profile (upload logo)
 router.put('/me', auth, isHRD, upload.single('logo'), async (req, res) => {
   try {
     const company = await Company.findOne({ user: req.user.id });
     if (!company) {
-      return res.status(404).json({ msg: 'Company not found' });
+      return res.status(404).json({ success: false, message: 'Company not found' });
     }
 
     const { name, address, phone, description } = req.body;
@@ -43,9 +43,14 @@ router.put('/me', auth, isHRD, upload.single('logo'), async (req, res) => {
     if (description) updateFields.description = description;
 
     if (req.file) {
+      // 🧹 Hapus logo lama kalau ada
+      if (company.logo) {
+        await deleteFromVercelBlob(company.logo);
+      }
+
       const buffer = req.file.buffer;
-      const fileName = `${req.user.id}-${Date.now()}.png`;
-      const logoUrl = await uploadBufferToVercelBlob(buffer, fileName);
+      const fileName = req.file.originalname;
+      const logoUrl = await uploadBufferToVercelBlob(buffer, fileName, req.file.mimetype);
       updateFields.logo = logoUrl;
     }
 
@@ -55,10 +60,10 @@ router.put('/me', auth, isHRD, upload.single('logo'), async (req, res) => {
       { new: true }
     );
 
-    return res.json({
+    res.json({
       success: true,
-      profile: updatedCompany,
       message: 'Company profile updated successfully',
+      data: updatedCompany,
     });
   } catch (err) {
     console.error('❌ Error updating company:', err.message);
