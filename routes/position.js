@@ -110,8 +110,8 @@ router.get('/', async (req, res) => {
   try {
     const currentDate = new Date();
     const positions = await AvailablePosition.find({
-      submission_start_date: { $lte: currentDate },
-      submission_end_date: { $gte: currentDate },
+      
+      submission_end_date: { $gte: new Date() },
       is_active: true
     })
       .populate('company', ['name', 'address'])
