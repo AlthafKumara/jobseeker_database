@@ -114,7 +114,7 @@ router.get('/', async (req, res) => {
       submission_end_date: { $gte: new Date() },
       is_active: true
     })
-      .populate('company', ['name', 'address'])
+      .populate('company', ['name', 'address','logo'])
       .sort({ createdAt: -1 });
 
     res.json(positions);
