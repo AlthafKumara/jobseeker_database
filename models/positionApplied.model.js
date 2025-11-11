@@ -11,6 +11,12 @@ const positionAppliedSchema = new mongoose.Schema({
     ref: 'Society',
     required: true
   },
+  portfolio: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Portfolio',
+  required: true
+},
+
   apply_date: {
     type: Date,
     default: Date.now

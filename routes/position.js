@@ -159,28 +159,46 @@ router.post('/:id/apply', [auth, isSociety], async (req, res) => {
       return res.status(400).json({ msg: 'This position is not currently accepting applications' });
     }
 
-    const society = await Society.findOne({ user: req.user.id }); 
+    const society = await Society.findOne({ user: req.user.id });
+
+    // 🔍 Cek apakah sudah pernah apply
     const existingApplication = await PositionApplied.findOne({
       available_position: req.params.id,
-      society: society._id
+      society: society._id,
     });
 
     if (existingApplication) {
       return res.status(400).json({ msg: 'You have already applied for this position' });
     }
 
+    // 🔹 Ambil portfolio milik society
+    const portfolio = await Portfolio.findOne({ society: society._id });
+    if (!portfolio) {
+      return res.status(400).json({ msg: 'Please create your portfolio before applying' });
+    }
+
+    // 🔹 Simpan aplikasi dengan referensi portfolio
     const newApplication = new PositionApplied({
       available_position: req.params.id,
       society: society._id,
+      portfolio: portfolio._id, // simpan ID portfolio
       apply_date: new Date(),
-      status: 'PENDING'
+      status: 'PENDING',
     });
 
     const application = await newApplication.save();
-    await application.populate({
-      path: 'available_position',
-      populate: { path: 'company', model: 'Company', select: 'name' }
-    });
+
+    await application.populate([
+      {
+        path: 'available_position',
+        populate: { path: 'company', model: 'Company', select: 'name' },
+      },
+      {
+        path: 'portfolio',
+        model: 'Portfolio',
+        select: 'skills description file',
+      },
+    ]);
 
     res.json(application);
   } catch (err) {
