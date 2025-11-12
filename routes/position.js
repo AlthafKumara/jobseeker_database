@@ -236,6 +236,7 @@ router.get('/:id/applications', auth, isHRD, async (req, res) => {
 
     const applications = await PositionApplied.find({ available_position: req.params.id })
       .populate('society', ['name', 'email', 'phone'])
+      .populate('portfolio', ['description', 'skills', 'file'])
       .sort({ apply_date: -1 });
 
     res.json(applications);
