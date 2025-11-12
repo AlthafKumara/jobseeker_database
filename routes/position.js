@@ -276,4 +276,34 @@ router.get('/:id/applications', auth, isHRD, async (req, res) => {
   }
 });
 
+// @route   GET /api/positions/my-applications
+// @desc    Get all positions that current society has applied to
+// @access  Private (Society)
+router.get('/my-applications', auth, isSociety, async (req, res) => {
+  try {
+    const society = await Society.findOne({ user: req.user.id });
+    if (!society) {
+      return res.status(404).json({ msg: 'Society not found' });
+    }
+
+    // Ambil semua aplikasi milik society ini
+    const applications = await PositionApplied.find({ society: society._id })
+      .populate({
+        path: 'available_position',
+        populate: {
+          path: 'company',
+          model: 'Company',
+          select: 'name address logo'
+        }
+      })
+      .sort({ apply_date: -1 });
+
+    res.json(applications);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+
 module.exports = router;
