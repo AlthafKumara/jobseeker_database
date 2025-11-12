@@ -150,86 +150,59 @@ router.get('/company', auth, isHRD, async (req, res) => {
 router.post('/:id/apply', [auth, isSociety], async (req, res) => {
   try {
     const position = await AvailablePosition.findById(req.params.id);
-    if (!position) {
-      return res.status(404).json({ msg: 'Position not found' });
-    }
-
-    const currentDate = new Date();
-    if (currentDate < position.submission_start_date || currentDate > position.submission_end_date) {
-      return res.status(400).json({ msg: 'This position is not currently accepting applications' });
-    }
+    if (!position) return res.status(404).json({ msg: 'Position not found' });
 
     const society = await Society.findOne({ user: req.user.id });
-
-    // 🔍 Cek apakah sudah pernah apply
     const existingApplication = await PositionApplied.findOne({
       available_position: req.params.id,
       society: society._id,
     });
+    if (existingApplication) return res.status(400).json({ msg: 'You have already applied for this position' });
 
-    if (existingApplication) {
-      return res.status(400).json({ msg: 'You have already applied for this position' });
-    }
-
-    // 🔹 Ambil portfolio milik society
     const portfolio = await Portfolio.findOne({ society: society._id });
-    if (!portfolio) {
-      return res.status(400).json({ msg: 'Please create your portfolio before applying' });
-    }
+    if (!portfolio) return res.status(400).json({ msg: 'Please create your portfolio before applying' });
 
-    // 🔹 Simpan aplikasi dengan referensi portfolio
+    const { cover_letter } = req.body; 
+
     const newApplication = new PositionApplied({
       available_position: req.params.id,
       society: society._id,
-      portfolio: portfolio._id, // simpan ID portfolio
+      portfolio: portfolio._id,
       apply_date: new Date(),
       status: 'PENDING',
+      cover_letter, // simpan di DB
     });
 
     const application = await newApplication.save();
-
     await application.populate([
-      {
-        path: 'available_position',
-        populate: { path: 'company', model: 'Company', select: 'name' },
-      },
-      {
-        path: 'portfolio',
-        model: 'Portfolio',
-        select: 'skills description file',
-      },
+      { path: 'available_position', populate: { path: 'company', model: 'Company', select: 'name' } },
+      { path: 'portfolio', model: 'Portfolio', select: 'skills description file' },
     ]);
 
     res.json(application);
   } catch (err) {
     console.error(err.message);
-    if (err.kind === 'ObjectId') {
-      return res.status(404).json({ msg: 'Position not found' });
-    }
     res.status(500).send('Server Error');
   }
 });
 
+
 // @route   PUT /api/positions/applications/:id
-// @desc    Update application status
+// @desc    Update application status & send message to society
 // @access  Private (HRD)
 router.put(
   '/applications/:id',
   [auth, isHRD, check('status', 'Status is required').isIn(['ACCEPTED', 'REJECTED'])],
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     try {
       const application = await PositionApplied.findById(req.params.id)
         .populate('available_position')
         .populate('society');
 
-      if (!application) {
-        return res.status(404).json({ msg: 'Application not found' });
-      }
+      if (!application) return res.status(404).json({ msg: 'Application not found' });
 
       const company = await Company.findOne({ user: req.user.id });
       if (application.available_position.company.toString() !== company._id.toString()) {
@@ -237,18 +210,17 @@ router.put(
       }
 
       application.status = req.body.status;
+      if (req.body.message) application.message = req.body.message; 
       await application.save();
 
       res.json(application);
     } catch (err) {
       console.error(err.message);
-      if (err.kind === 'ObjectId') {
-        return res.status(404).json({ msg: 'Application not found' });
-      }
       res.status(500).send('Server Error');
     }
   }
 );
+
 
 // @route   GET /api/positions/:id/applications
 // @desc    Get all applications for a position

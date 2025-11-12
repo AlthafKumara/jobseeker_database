@@ -12,11 +12,10 @@ const positionAppliedSchema = new mongoose.Schema({
     required: true
   },
   portfolio: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Portfolio',
-  required: true
-},
-
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Portfolio',
+    required: true
+  },
   apply_date: {
     type: Date,
     default: Date.now
@@ -26,7 +25,12 @@ const positionAppliedSchema = new mongoose.Schema({
     enum: ['PENDING', 'ACCEPTED', 'REJECTED'],
     default: 'PENDING'
   },
-  notes: {
+  // 📝 Tambahan field baru
+  cover_letter: { // dikirim oleh Society saat melamar
+    type: String,
+    trim: true
+  },
+  message: { // dikirim oleh HRD saat update status
     type: String,
     trim: true
   }
@@ -34,7 +38,7 @@ const positionAppliedSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Create a compound index to ensure one application per position per society
+// Pastikan satu society hanya bisa melamar satu kali ke posisi yang sama
 positionAppliedSchema.index(
   { available_position: 1, society: 1 },
   { unique: true }
