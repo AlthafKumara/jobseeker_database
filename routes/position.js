@@ -4,7 +4,8 @@ const { auth, isHRD, isSociety } = require('../middleware/auth');
 const AvailablePosition = require('../models/availablePosition.model');
 const PositionApplied = require('../models/positionApplied.model');
 const Company = require('../models/company.model');
-const Society = require('../models/society.model'); // <- tambahkan ini
+const Society = require('../models/society.model'); 
+const Portfolio = require('../models/portfolio.model');
 
 const router = express.Router();
 
@@ -144,25 +145,29 @@ router.get('/company', auth, isHRD, async (req, res) => {
   }
 });
 
-// @route   POST /api/positions/:id/apply
-// @desc    Apply for a position
-// @access  Private (Society)
 router.post('/:id/apply', [auth, isSociety], async (req, res) => {
   try {
+    console.log('📩 Apply request diterima:', req.params.id);
+    console.log('Body:', req.body);
+
     const position = await AvailablePosition.findById(req.params.id);
     if (!position) return res.status(404).json({ msg: 'Position not found' });
 
     const society = await Society.findOne({ user: req.user.id });
+    if (!society) return res.status(404).json({ msg: 'Society not found' });
+
     const existingApplication = await PositionApplied.findOne({
       available_position: req.params.id,
       society: society._id,
     });
-    if (existingApplication) return res.status(400).json({ msg: 'You have already applied for this position' });
+    if (existingApplication)
+      return res.status(400).json({ msg: 'You have already applied for this position' });
 
     const portfolio = await Portfolio.findOne({ society: society._id });
-    if (!portfolio) return res.status(400).json({ msg: 'Please create your portfolio before applying' });
+    if (!portfolio)
+      return res.status(400).json({ msg: 'Please create your portfolio before applying' });
 
-    const { cover_letter } = req.body; 
+    const { cover_letter } = req.body;
 
     const newApplication = new PositionApplied({
       available_position: req.params.id,
@@ -170,21 +175,17 @@ router.post('/:id/apply', [auth, isSociety], async (req, res) => {
       portfolio: portfolio._id,
       apply_date: new Date(),
       status: 'PENDING',
-      cover_letter, // simpan di DB
+      cover_letter,
     });
 
-    const application = await newApplication.save();
-    await application.populate([
-      { path: 'available_position', populate: { path: 'company', model: 'Company', select: 'name' } },
-      { path: 'portfolio', model: 'Portfolio', select: 'skills description file' },
-    ]);
-
-    res.json(application);
+    await newApplication.save();
+    res.json({ msg: 'Application submitted successfully', data: newApplication });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error('❌ Error in apply route:', err);
+    res.status(500).json({ msg: 'Server error', error: err.message });
   }
 });
+
 
 
 // @route   PUT /api/positions/applications/:id
@@ -262,7 +263,7 @@ router.get('/my-applications', auth, isSociety, async (req, res) => {
     // Ambil semua aplikasi milik society ini
     const applications = await PositionApplied.find({ society: society._id })
       .populate({
-        path: 'available_position',
+        path: 'available_position', 
         populate: {
           path: 'company',
           model: 'Company',
