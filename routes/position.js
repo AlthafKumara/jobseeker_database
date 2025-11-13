@@ -306,7 +306,7 @@ router.get('/company/applications', auth, isHRD, async (req, res) => {
           select: 'name address logo'
         }
       })
-      .populate('society', ['name', 'email', 'phone'])
+      .populate('society', ['name', 'email', 'phone', 'profile_picture'])
       .populate('portfolio', ['description', 'skills', 'file'])
       .sort({ apply_date: -1 });
 
