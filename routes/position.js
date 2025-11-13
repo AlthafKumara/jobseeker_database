@@ -279,5 +279,48 @@ router.get('/my-applications', auth, isSociety, async (req, res) => {
   }
 });
 
+// @route   GET /api/positions/company/applications
+// @desc    Get all applicants for all positions owned by the current company
+// @access  Private (HRD)
+router.get('/company/applications', auth, isHRD, async (req, res) => {
+  try {
+    // Temukan company berdasarkan user HRD
+    const company = await Company.findOne({ user: req.user.id });
+    if (!company) {
+      return res.status(404).json({ msg: 'Company not found' });
+    }
+
+    // Temukan semua posisi milik company
+    const positions = await AvailablePosition.find({ company: company._id });
+    const positionIds = positions.map(pos => pos._id);
+
+    // Ambil semua aplikasi dari posisi tersebut
+    const applications = await PositionApplied.find({
+      available_position: { $in: positionIds }
+    })
+      .populate({
+        path: 'available_position',
+        populate: {
+          path: 'company',
+          model: 'Company',
+          select: 'name address logo'
+        }
+      })
+      .populate('society', ['name', 'email', 'phone'])
+      .populate('portfolio', ['description', 'skills', 'file'])
+      .sort({ apply_date: -1 });
+
+    res.json({
+      success: true,
+      count: applications.length,
+      data: applications
+    });
+  } catch (err) {
+    console.error('❌ Error fetching all applicants:', err);
+    res.status(500).json({ msg: 'Server Error', error: err.message });
+  }
+});
+
+
 
 module.exports = router;
