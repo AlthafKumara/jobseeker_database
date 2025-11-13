@@ -9,9 +9,9 @@ const Portfolio = require('../models/portfolio.model');
 
 const router = express.Router();
 
-// @route   POST /api/positions
-// @desc    Create a new position
-// @access  Private (HRD)
+/* ======================================================
+   🟢 CREATE NEW POSITION (HRD)
+====================================================== */
 router.post(
   '/',
   [
@@ -27,43 +27,27 @@ router.post(
   ],
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const {
-      position_name,
-      capacity,
-      description,
-      submission_start_date,
-      submission_end_date
-    } = req.body;
+    const { position_name, capacity, description, submission_start_date, submission_end_date } = req.body;
 
     try {
-      console.log('Request body:', req.body);
-      
       const company = await Company.findOne({ user: req.user.id });
       if (!company) {
-        console.log('Company not found for user:', req.user.id);
-        return res.status(400).json({ 
-          success: false,
-          error: 'Company not found for this user' 
-        });
+        return res.status(400).json({ success: false, error: 'Company not found for this user' });
       }
 
-      // Convert dates to proper Date objects
       const startDate = new Date(submission_start_date);
       const endDate = new Date(submission_end_date);
 
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        console.log('Invalid date format');
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          error: 'Invalid date format. Please use ISO 8601 format (e.g., 2025-09-10T00:00:00.000Z)' 
+          error: 'Invalid date format. Please use ISO 8601 format (e.g., 2025-09-10T00:00:00.000Z)'
         });
       }
 
-      console.log('Creating new position with data:', {
+      const newPosition = new AvailablePosition({
         position_name,
         capacity: Number(capacity),
         description,
@@ -72,50 +56,25 @@ router.post(
         company: company._id
       });
 
-      const newPosition = new AvailablePosition({
-        position_name,
-        capacity: Number(capacity), // Ensure capacity is a number
-        description,
-        submission_start_date: startDate,
-        submission_end_date: endDate,
-        company: company._id
-      });
-
       const position = await newPosition.save();
-      console.log('Position created successfully:', position);
-      
-      res.status(201).json({
-        success: true,
-        data: position
-      });
-      
+      res.status(201).json({ success: true, data: position });
     } catch (err) {
-      console.error('Error creating position:', {
-        message: err.message,
-        stack: err.stack,
-        name: err.name
-      });
-      res.status(500).json({ 
-        success: false,
-        error: 'Server Error',
-        message: err.message 
-      });
+      console.error('Error creating position:', err);
+      res.status(500).json({ success: false, error: 'Server Error', message: err.message });
     }
   }
 );
 
-// @route   GET /api/positions
-// @desc    Get all available positions
-// @access  Public
+/* ======================================================
+   🔵 GET ALL ACTIVE POSITIONS (PUBLIC)
+====================================================== */
 router.get('/', async (req, res) => {
   try {
-    const currentDate = new Date();
     const positions = await AvailablePosition.find({
-      
       submission_end_date: { $gte: new Date() },
       is_active: true
     })
-      .populate('company', ['name', 'address','logo'])
+      .populate('company', ['name', 'address', 'logo'])
       .sort({ createdAt: -1 });
 
     res.json(positions);
@@ -125,19 +84,15 @@ router.get('/', async (req, res) => {
   }
 });
 
-// @route   GET /api/positions/company
-// @desc    Get all positions for current company
-// @access  Private (HRD)
+/* ======================================================
+   🟣 GET POSITIONS BY CURRENT COMPANY (HRD)
+====================================================== */
 router.get('/company', auth, isHRD, async (req, res) => {
   try {
     const company = await Company.findOne({ user: req.user.id });
-    if (!company) {
-      return res.status(400).json({ msg: 'Company not found' });
-    }
+    if (!company) return res.status(400).json({ msg: 'Company not found' });
 
-    const positions = await AvailablePosition.find({ company: company._id })
-      .sort({ createdAt: -1 });
-
+    const positions = await AvailablePosition.find({ company: company._id }).sort({ createdAt: -1 });
     res.json(positions);
   } catch (err) {
     console.error(err.message);
@@ -145,11 +100,11 @@ router.get('/company', auth, isHRD, async (req, res) => {
   }
 });
 
+/* ======================================================
+   🟤 APPLY FOR A POSITION (SOCIETY)
+====================================================== */
 router.post('/:id/apply', [auth, isSociety], async (req, res) => {
   try {
-    console.log('📩 Apply request diterima:', req.params.id);
-    console.log('Body:', req.body);
-
     const position = await AvailablePosition.findById(req.params.id);
     if (!position) return res.status(404).json({ msg: 'Position not found' });
 
@@ -186,11 +141,9 @@ router.post('/:id/apply', [auth, isSociety], async (req, res) => {
   }
 });
 
-
-
-// @route   PUT /api/positions/applications/:id
-// @desc    Update application status & send message to society
-// @access  Private (HRD)
+/* ======================================================
+   🟡 UPDATE APPLICATION STATUS (HRD)
+====================================================== */
 router.put(
   '/applications/:id',
   [auth, isHRD, check('status', 'Status is required').isIn(['ACCEPTED', 'REJECTED'])],
@@ -202,7 +155,6 @@ router.put(
       const application = await PositionApplied.findById(req.params.id)
         .populate('available_position')
         .populate('society');
-
       if (!application) return res.status(404).json({ msg: 'Application not found' });
 
       const company = await Company.findOne({ user: req.user.id });
@@ -211,7 +163,7 @@ router.put(
       }
 
       application.status = req.body.status;
-      if (req.body.message) application.message = req.body.message; 
+      if (req.body.message) application.message = req.body.message;
       await application.save();
 
       res.json(application);
@@ -222,79 +174,17 @@ router.put(
   }
 );
 
-
-// @route   GET /api/positions/:id/applications
-// @desc    Get all applications for a position
-// @access  Private (HRD)
-router.get('/:id/applications', auth, isHRD, async (req, res) => {
-  try {
-    const company = await Company.findOne({ user: req.user.id });
-    const position = await AvailablePosition.findOne({ _id: req.params.id, company: company._id });
-
-    if (!position) {
-      return res.status(404).json({ msg: 'Position not found' });
-    }
-
-    const applications = await PositionApplied.find({ available_position: req.params.id })
-      .populate('society', ['name', 'email', 'phone'])
-      .populate('portfolio', ['description', 'skills', 'file'])
-      .sort({ apply_date: -1 });
-
-    res.json(applications);
-  } catch (err) {
-    console.error(err.message);
-    if (err.kind === 'ObjectId') {
-      return res.status(404).json({ msg: 'Position not found' });
-    }
-    res.status(500).send('Server Error');
-  }
-});
-
-// @route   GET /api/positions/my-applications
-// @desc    Get all positions that current society has applied to
-// @access  Private (Society)
-router.get('/my-applications', auth, isSociety, async (req, res) => {
-  try {
-    const society = await Society.findOne({ user: req.user.id });
-    if (!society) {
-      return res.status(404).json({ msg: 'Society not found' });
-    }
-
-    // Ambil semua aplikasi milik society ini
-    const applications = await PositionApplied.find({ society: society._id })
-      .populate({
-        path: 'available_position', 
-        populate: {
-          path: 'company',
-          model: 'Company',
-          select: 'name address logo'
-        }
-      })
-      .sort({ apply_date: -1 });
-
-    res.json(applications);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
-});
-
-// @route   GET /api/positions/company/applications
-// @desc    Get all applicants for all positions owned by the current company
-// @access  Private (HRD)
+/* ======================================================
+   🟢 GET ALL APPLICATIONS FOR CURRENT COMPANY (HRD)
+====================================================== */
 router.get('/company/applications', auth, isHRD, async (req, res) => {
   try {
-    // Temukan company berdasarkan user HRD
     const company = await Company.findOne({ user: req.user.id });
-    if (!company) {
-      return res.status(404).json({ msg: 'Company not found' });
-    }
+    if (!company) return res.status(404).json({ msg: 'Company not found' });
 
-    // Temukan semua posisi milik company
     const positions = await AvailablePosition.find({ company: company._id });
     const positionIds = positions.map(pos => pos._id);
 
-    // Ambil semua aplikasi dari posisi tersebut
     const applications = await PositionApplied.find({
       available_position: { $in: positionIds }
     })
@@ -321,6 +211,51 @@ router.get('/company/applications', auth, isHRD, async (req, res) => {
   }
 });
 
+/* ======================================================
+   🔴 GET APPLICATIONS BY POSITION ID (HRD)
+====================================================== */
+router.get('/:id/applications', auth, isHRD, async (req, res) => {
+  try {
+    const company = await Company.findOne({ user: req.user.id });
+    const position = await AvailablePosition.findOne({ _id: req.params.id, company: company._id });
+    if (!position) return res.status(404).json({ msg: 'Position not found' });
 
+    const applications = await PositionApplied.find({ available_position: req.params.id })
+      .populate('society', ['name', 'email', 'phone'])
+      .populate('portfolio', ['description', 'skills', 'file'])
+      .sort({ apply_date: -1 });
+
+    res.json(applications);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+/* ======================================================
+   🧑‍💼 GET MY APPLICATIONS (SOCIETY)
+====================================================== */
+router.get('/my-applications', auth, isSociety, async (req, res) => {
+  try {
+    const society = await Society.findOne({ user: req.user.id });
+    if (!society) return res.status(404).json({ msg: 'Society not found' });
+
+    const applications = await PositionApplied.find({ society: society._id })
+      .populate({
+        path: 'available_position',
+        populate: {
+          path: 'company',
+          model: 'Company',
+          select: 'name address logo'
+        }
+      })
+      .sort({ apply_date: -1 });
+
+    res.json(applications);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
 
 module.exports = router;
