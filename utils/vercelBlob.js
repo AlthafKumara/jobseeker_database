@@ -22,6 +22,7 @@ async function uploadBufferToVercelBlob(buffer, fileName, mimeType) {
       access: 'public',
       contentType: mimeType || 'application/octet-stream',
       token: process.env.BLOB_READ_WRITE_TOKEN,
+      allowOverwrite: true,
     });
 
     console.log(`✅ File uploaded to Vercel Blob: ${blob.url}`);
